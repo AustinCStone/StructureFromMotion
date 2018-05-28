@@ -56,6 +56,12 @@ class Renderer(object):
         self.iren = vtk.vtkRenderWindowInteractor()
         self.iren.SetInteractorStyle(Camera(self.iren))
         self.renderer = vtk.vtkRenderer()
+        axes = vtk.vtkAxesActor()
+        #  The axes are positioned with a user transform
+        transform = vtk.vtkTransform()
+        transform.Translate(0.0, 0.0, 0.0)
+        axes.SetUserTransform(transform)
+        self.renderer.AddActor(axes)
         for renderable in renderables:
             for actor in renderable.get_actors():
                 self.renderer.AddActor(actor)

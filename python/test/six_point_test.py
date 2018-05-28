@@ -1,6 +1,8 @@
 """ Dummy test """
 import numpy as np
 import copy
+import time
+from PIL import Image
 
 import transformations as trans
 from rendering import SphereCloud, OrientedRectangles, Renderer
@@ -71,39 +73,50 @@ def test_six_point():
     points = np.stack([point1, point2, point3, point4, point5, point6])
     points = points.transpose((1, 0))
 
-    cam_1_pos = np.asarray([0, 0, 0], np.float32)
-    cam_1_rot_mat = trans.euler_matrix(0, 0, 0)
-    cam_1_pos_mat = trans.translation_matrix(cam_1_pos)
-    cam_1_extrinsic = np.matmul(cam_1_rot_mat, cam_1_pos_mat)
+    def project_points(points, cam_pos, cam_rot_mat, colors):
+        """ Project the points into the camera image """
 
-    cam_2_pos = np.asarray([2, 0, 0], np.float32)
-    cam_2_rot_mat = trans.euler_matrix(0, 0, 0)
-    cam_2_pos_mat = trans.translation_matrix(cam_2_pos)
-    cam_2_extrinsic = np.matmul(cam_2_rot_mat, cam_2_pos_mat)
+        cam_pos_mat = trans.translation_matrix(-cam_pos)
+        cam_extrinsic = np.matmul(np.linalg.inv(cam_rot_mat), cam_pos_mat)
 
-    focal_x = .5
-    focal_y = .5
+        focal_x = 1.
+        focal_y = 1.
 
-    perspective_mat = form_intrinsic_matrix(focal_x, focal_y)[:-1, :]
-    perspective_mat[:, -1] = 0
+        perspective_mat = form_intrinsic_matrix(focal_x, focal_y)[:-1, :]
+        perspective_mat[:, -1] = 0
 
-    rows = 100
-    cols = 100
+        rows = 100
+        cols = 100
 
-    # transform points from world coordinates into camera centric coords, then
-    # transform points into pixel coords
-    cam_1_pixel_coords = np.matmul(perspective_mat, np.matmul(cam_1_extrinsic, points))
-    cam_1_pixel_coords /= cam_1_pixel_coords[-1, :]
-    cam_1_pixel_coords = (cam_1_pixel_coords[:-1, :] + 1.) / 2.
-    cam_1_pixel_coords *= np.asarray([rows, cols]).reshape((2, 1))
+        # transform points from world coordinates into camera centric coords, then
+        # transform points into pixel coords
+        cam_pixel_coords = np.matmul(perspective_mat, np.matmul(cam_extrinsic, points))
+        cam_pixel_coords /= cam_pixel_coords[-1, :]
+        cam_pixel_coords = (cam_pixel_coords[:-1, :] + 1.) / 2.
+        cam_pixel_coords *= np.asarray([rows, cols]).reshape((2, 1))
 
-    cam_2_pixel_coords = np.matmul(perspective_mat, np.matmul(cam_2_extrinsic, points))
-    cam_2_pixel_coords /= cam_2_pixel_coords[-1, :]
-    cam_2_pixel_coords = (cam_2_pixel_coords[:-1, :] + 1.) / 2.
-    cam_2_pixel_coords *= np.asarray([rows, cols]).reshape((2, 1))
+        cam_img = np.zeros((rows, cols, 3))
+        cam_pixel_coords = np.transpose(cam_pixel_coords, (1, 0))
+        for color, pixel_coord in zip(colors, cam_pixel_coords):
+            if 0 < pixel_coord[0] < cols and 0 < pixel_coord[1] < rows:
+                cam_img[int(pixel_coord[1]), int(pixel_coord[0])] = color
+
+        return cam_img
 
     random_state = np.random.RandomState(seed=42)
     colors = [random_state.rand(3) for _ in range(6)]
+
+    cam_1_pos = np.asarray([0, 0, 0], np.float32)
+    cam_1_rot_mat = trans.euler_matrix(0, 0, 0)
+    cam_1_img = project_points(points, cam_1_pos, cam_1_rot_mat, colors)
+
+    cam_2_pos = np.asarray([0, 0, 0], np.float32)
+    cam_2_rot_mat = trans.euler_matrix(.5, 0, 0)
+    cam_2_img = project_points(points, cam_2_pos, cam_2_rot_mat, colors)
+
+    Image.fromarray((cam_1_img * 255.).astype('uint8'), 'RGB').show('cam 1')
+    time.sleep(1.)
+    Image.fromarray((cam_2_img * 255.).astype('uint8'), 'RGB').show('cam 2')
 
     render(points, colors, np.stack([cam_1_pos, cam_2_pos]),
            np.stack([cam_1_rot_mat, cam_2_rot_mat]))
