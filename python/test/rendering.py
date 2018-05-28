@@ -89,7 +89,7 @@ class PointCloud(Renderable):
         """ Erase all rendered points """
         raise NotImplementedError
 
-    def add_object(self, point):
+    def add_object(self, point, color=None):
         """ Add a new point """
         raise NotImplementedError
 
@@ -114,7 +114,9 @@ class PixelCloud(PointCloud):
         self.vtkActors = [self.vtkActor]
         self.vtkActor.SetMapper(mapper)
 
-    def add_object(self, point):
+    def add_object(self, point, color=None):
+        if color is not None:
+            raise NotImplementedError
         if self.vtkPoints.GetNumberOfPoints() < self.max_num:
             pointId = self.vtkPoints.InsertNextPoint(point[:])
             self.vtkDepth.InsertNextValue(point[2])
@@ -144,12 +146,13 @@ class PixelCloud(PointCloud):
 class SphereCloud(PointCloud):
     """ Render a point cloud of mini spheres which are easier
     to see, but more expensive to render. """
+
     def __init__(self, z_min=-1.0, z_max=1.0, max_num=100, radius=.03):
         self.max_num = max_num
         self.radius = radius
         self.vtkActors = []
 
-    def add_object(self, point):
+    def add_object(self, point, color=None):
         if len(self.vtkActors) < self.max_num:
             source = vtk.vtkSphereSource()
             source.SetCenter(point[:])
@@ -158,7 +161,10 @@ class SphereCloud(PointCloud):
             mapper.SetInputConnection(source.GetOutputPort())
             actor = vtk.vtkActor()
             actor.SetMapper(mapper)
-            actor.GetProperty().SetColor(point[:] * .7 + .3)
+            if color is None:
+                actor.GetProperty().SetColor(point[:] * .7 + .3)
+            else:
+                actor.GetProperty().SetColor(color)
             self.vtkActors.append(actor)
         else:
             assert False, 'Too many spheres to render.'
@@ -171,6 +177,8 @@ class SphereCloud(PointCloud):
 
 
 class OrientedRectangles(object):
+    """ Useful for rendering positions of cameras """
+
     def __init__(self, z_min=-1.0, z_max=1.0, max_num=100, height=.03,
                  width=.03, focal=.03):
         self.max_num = max_num
@@ -179,7 +187,7 @@ class OrientedRectangles(object):
         self.focal = focal
         self.vtkActors = []
 
-    def add_rect(self, position, orientation_mat):
+    def add_rect(self, position, rot_mat):
 
         if len(self.vtkActors) > self.max_num:
             assert False, 'too many OrientedRectangles to render.'
@@ -190,7 +198,7 @@ class OrientedRectangles(object):
         br = np.asarray([p[0] + self.width, p[1] + self.height, p[2]]).reshape((3, 1))
         focal = np.asarray([p[0], p[1], p[2] - self.focal]).reshape((3, 1))
 
-        oriented_pts = np.matmul(orientation_mat, np.concatenate([tl, tr, bl, br, focal], axis=1))
+        oriented_pts = np.matmul(rot_mat, np.concatenate([tl, tr, bl, br, focal], axis=1))
         tl, tr, bl, br, focal = oriented_pts.transpose((1, 0))
         points = vtk.vtkPoints()
         points.SetNumberOfPoints(5)
