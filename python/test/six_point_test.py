@@ -50,17 +50,18 @@ def render(points, camera_positions, camera_orientations):
     renderer.run()
 
 
-def test_five_point():
+def test_six_point():
     """ See if we can recover the positions of
-    5 known 3D points. """
+    6 known 3D points. """
 
     point1 = np.asarray([1, 1, 10], np.float32)
     point2 = np.asarray([1, 3, 12], np.float32)
     point3 = np.asarray([-1, -1, 5], np.float32)
     point4 = np.asarray([-2, 2, 8], np.float32)
     point5 = np.asarray([-5, 5, 15], np.float32)
+    point6 = np.asarray([5, -5, 12], np.float32)
 
-    points = np.stack([point1, point2, point3, point4, point5])
+    points = np.stack([point1, point2, point3, point4, point5, point6])
     render_points(points)
     cam_1_pos = np.asarray([0, 0, 0], np.float32)
     # looking directly down z axis
@@ -98,4 +99,4 @@ def test_five_point():
 
 
 if __name__ == '__main__':
-    test_five_point()
+    test_six_point()
