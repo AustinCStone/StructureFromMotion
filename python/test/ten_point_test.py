@@ -1,4 +1,6 @@
-""" Dummy test """
+""" Test that we can reconstruct 3D geometry from just point correspondences
+on a pair of images. """
+
 import numpy as np
 import copy
 import time
@@ -13,20 +15,26 @@ from rendering import SphereCloud, OrientedRectangles, Renderer
 from bundle_adjustment import bundle_adjustment_sparsity, fun, project
 
 
-def form_intrinsic_matrix(focal_x, focal_y):
-    """ Form intrinsic matrix assuming no skew and pp in the image center """
-
-    mat = np.eye(4)
-    mat[0, 0] = focal_x
-    mat[1, 1] = focal_y
-    return mat
-
-
 def rgb2gray(rgb):
+    """ Convert an RGB numpy image to grayscale
+    Params:
+        rgb: rgb image as numpy array with last axis size 3
+    Returns:
+        gray: numpy array with same shape as rgb but last axis size 1
+    """
     return np.dot(rgb[...,:3], [0.299, 0.587, 0.114])
 
 
 def preprocess_img(img):
+    """ Run preprocessing on camera frames - ensure they are in the
+    right range and grayscale.
+    
+    Params:
+        img: numpy array of rank 3 but arbitrary shape
+    Returns:
+        preproc_img: numpy array with same shape as img but last axis
+            ensured to be size 1 if not already
+    """
     assert img.min() >= 0.
     assert img.max() <= 255.
 
@@ -41,7 +49,7 @@ def preprocess_img(img):
 
 
 def identify_corresp(img1, img2, max_pix_movement=50, normalize=True, show=False):
-    """ Find corresponding points between two images """
+    """ Find corresponding points between two images using openCV ORB detector """
 
     # Initiate ORB detector
     orb = cv2.ORB_create()
@@ -121,8 +129,6 @@ def identify_corresp_mock(img1, img2, max_pix_movement=50, normalize=True, show=
 
 
 
-
-
 def recover_mesh(imgs):
     """ Recover a 3D mesh from a sequence of video frames """
 
@@ -152,24 +158,22 @@ def render(points, point_colors, camera_positions, camera_rvecs):
     renderer.run()
 
 
-def solve(kp1, kp2, rows, cols, true_points3d, true_camera_params):
+def solve(kp1, kp2, rows, cols, colors):
+
     # camera_params with shape (n_cameras, 8) contains initial estimates of parameters for all
     # cameras. First 3 components in each row form a rotation vector 
     # (https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula), next 3 components form a
     # translation vector, then a focal_x and focal_y
-    camera_params = np.zeros((2, 8))
+    camera_params = np.empty((2, 6))
     camera_params[:, :3] = np.zeros(3) # stupid initial guess
     camera_params[:, 3:6] = np.zeros(3) # stupid initial guess
-    camera_params[:, 6:] = 1.
+
     # points_3d with shape (n_points, 3) contains initial estimates
     # of point coordinates in the world frame.
-    points_3d = np.ones((10, 3))
-    points_3d = true_points3d
-    camera_params = true_camera_params
-    
+    points_3d = np.ones((10, 3)) # stupid initial guess
+
     # camera_ind with shape (n_observations,) contains indices of
     # cameras (from 0 to n_cameras - 1) involved in each observation.
-    camera_indices = np.arange(len(kp1) * 2)
     camera_indices = np.asarray([0 for _ in kp1] + [1 for _ in kp2])
 
     # point_ind with shape (n_observations,) contatins indices of
@@ -183,7 +187,7 @@ def solve(kp1, kp2, rows, cols, true_points3d, true_camera_params):
     n_cameras = camera_params.shape[0]
     n_points = points_3d.shape[0]
 
-    n = 9 * n_cameras + 3 * n_points
+    n = 6 * n_cameras + 3 * n_points + 2
     m = 2 * points_2d.shape[0]
 
     print("n_cameras: {}".format(n_cameras))
@@ -193,7 +197,9 @@ def solve(kp1, kp2, rows, cols, true_points3d, true_camera_params):
 
     A = bundle_adjustment_sparsity(n_cameras, n_points, camera_indices, point_indices)
 
-    x0 = np.hstack((camera_params.ravel(), points_3d.ravel()))
+    focal_length = np.float32([1., 1.])
+    x0 = np.hstack((camera_params.ravel(), points_3d.ravel(), focal_length))
+
     f0 = fun(x0, n_cameras, n_points, camera_indices, point_indices, points_2d)
 
     t0 = time.time()
@@ -203,30 +209,26 @@ def solve(kp1, kp2, rows, cols, true_points3d, true_camera_params):
     print("Optimization took {0:.0f} seconds".format(t1 - t0))
 
     num_cam_params = camera_params.shape[0] * camera_params.shape[1]
-
-    found_camera_params = np.reshape(res.x[:num_cam_params],
-                                     camera_params.shape)
-
-    found_3d_points = np.reshape(res.x[num_cam_params:], points_3d.shape)
-
-    # Computing rotation matrix
+    found_camera_params = np.reshape(res.x[:num_cam_params], camera_params.shape)
+    found_3d_points = np.reshape(res.x[num_cam_params:-2], points_3d.shape)
     found_cam_rvecs = found_camera_params[:, :3]
     found_cam_positions = found_camera_params[:, 3:6]
+    found_focal_x = res.x[-2]
+    found_focal_y = res.x[-1]
+    print(found_focal_x, found_focal_y)
 
-    found_focal_x = found_camera_params[:, -2]
-    found_focal_y = found_camera_params[:, -1]
+    cam_1_points2d = project(found_3d_points,
+                             found_camera_params[np.asarray([0 for _ in found_3d_points])],
+                             found_focal_x, found_focal_y)
 
-    random_state = np.random.RandomState(seed=42)
-    colors = [random_state.rand(3) for _ in range(n_points)]
-
-    cam_1_points2d = project(found_3d_points, found_camera_params[np.asarray([0 for _ in found_3d_points])])
-    cam_2_points2d = project(found_3d_points, found_camera_params[np.asarray([1 for _ in found_3d_points])])
+    cam_2_points2d = project(found_3d_points,
+                             found_camera_params[np.asarray([1 for _ in found_3d_points])],
+                             found_focal_x, found_focal_y)
 
     cam_1_img = draw_points2d(cam_1_points2d, colors, rows, cols, show=True)
     cam_2_img = draw_points2d(cam_2_points2d, colors, rows, cols, show=True)
 
-
-    #render(found_3d_points, colors, found_cam_positions, found_cam_rvecs)
+    render(found_3d_points, colors, found_cam_positions, found_cam_rvecs)
 
     '''
     plt.plot(res.fun)
@@ -242,8 +244,8 @@ def euler2mat(ai, aj, ak):
     j = 1
     k = 2
 
-    si, sj, sk = math.sin(ai), math.sin(aj), math.sin(ak)
-    ci, cj, ck = math.cos(ai), math.cos(aj), math.cos(ak)
+    si, sj, sk = np.sin(ai), np.sin(aj), np.sin(ak)
+    ci, cj, ck = np.cos(ai), np.cos(aj), np.cos(ak)
     cc, cs = ci*ck, ci*sk
     sc, ss = si*ck, si*sk
 
@@ -270,14 +272,14 @@ def mat2euler(matrix, axes='sxyz'):
 
     M = np.array(matrix, dtype=np.float64, copy=False)[:3, :3]
     
-    cy = math.sqrt(M[i, i]*M[i, i] + M[j, i]*M[j, i])
+    cy = np.sqrt(M[i, i]*M[i, i] + M[j, i]*M[j, i])
     if cy > 1e-9:
-        ax = math.atan2( M[k, j],  M[k, k])
-        ay = math.atan2(-M[k, i],  cy)
-        az = math.atan2( M[j, i],  M[i, i])
+        ax = np.atan2( M[k, j],  M[k, k])
+        ay = np.atan2(-M[k, i],  cy)
+        az = np.atan2( M[j, i],  M[i, i])
     else:
-        ax = math.atan2(-M[j, k],  M[j, j])
-        ay = math.atan2(-M[k, i],  cy)
+        ax = np.atan2(-M[j, k],  M[j, j])
+        ay = np.atan2(-M[k, i],  cy)
         az = 0.0
 
     return ax, ay, az
@@ -341,14 +343,16 @@ def test_ten_point():
     # camera_params with shape (n_cameras, 8) contains initial estimates of parameters for all
     # cameras. First 3 components in each row form a rotation vector, next 3 components
     # form the camera position in 3 space, then a focal_x and focal_y
-    camera_params = np.empty((2, 8)) 
+    camera_params = np.empty((2, 6)) 
     camera_params[0, :3] = cam_1_rvec
-    camera_params[0, 3:6] = cam_1_pos
+    camera_params[0, 3:] = cam_1_pos
     camera_params[1, :3] = cam_2_rvec
-    camera_params[1, 3:6] = cam_2_pos
-    camera_params[:, 6:] = np.asarray([focal_x, focal_y])
-    cam_1_points2d = project(points, camera_params[np.asarray([0 for _ in points])])
-    cam_2_points2d = project(points, camera_params[np.asarray([1 for _ in points])])
+    camera_params[1, 3:] = cam_2_pos
+
+    cam_1_points2d = project(points, camera_params[np.asarray([0 for _ in points])],
+                             focal_x, focal_y)
+    cam_2_points2d = project(points, camera_params[np.asarray([1 for _ in points])],
+                             focal_x, focal_y)
 
     cam_1_img = draw_points2d(cam_1_points2d, colors, rows, cols, show=True)
     cam_2_img = draw_points2d(cam_2_points2d, colors, rows, cols, show=True)
@@ -359,7 +363,7 @@ def test_ten_point():
 
     # render(points, colors, np.stack([cam_1_pos, cam_2_pos]), np.stack([cam_1_rvec, cam_2_rvec]))
 
-    solve(locs1, locs2, rows, cols, points, camera_params)
+    solve(locs1, locs2, rows, cols, colors)
 
 if __name__ == '__main__':
     test_ten_point()
