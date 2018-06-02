@@ -4,6 +4,8 @@ TODO: type annotations """
 import vtk
 import numpy as np
 
+from bundle_adjustment import rotate
+
 
 class Camera(vtk.vtkInteractorStyleTrackballCamera):
     """ Class for camera with key press call back to change
@@ -193,19 +195,20 @@ class OrientedRectangles(object):
         self.focal = focal
         self.vtkActors = []
 
-    def add_rect(self, position, rot_mat):
+    def add_rect(self, position, r_vec):
 
         if len(self.vtkActors) > self.max_num:
             assert False, 'too many OrientedRectangles to render.'
-        p = position
-        tl = np.asarray([p[0] - self.width, p[1] - self.height, p[2]]).reshape((3, 1))
-        tr = np.asarray([p[0] + self.width, p[1] - self.height, p[2]]).reshape((3, 1))
-        bl = np.asarray([p[0] - self.width, p[1] + self.height, p[2]]).reshape((3, 1))
-        br = np.asarray([p[0] + self.width, p[1] + self.height, p[2]]).reshape((3, 1))
-        focal = np.asarray([p[0], p[1], p[2] - self.focal]).reshape((3, 1))
 
-        oriented_pts = np.matmul(rot_mat, np.concatenate([tl, tr, bl, br, focal], axis=1))
-        tl, tr, bl, br, focal = oriented_pts.transpose((1, 0))
+        p = position
+        tl = np.asarray([p[0] - self.width, p[1] - self.height, p[2]])
+        tr = np.asarray([p[0] + self.width, p[1] - self.height, p[2]])
+        bl = np.asarray([p[0] - self.width, p[1] + self.height, p[2]])
+        br = np.asarray([p[0] + self.width, p[1] + self.height, p[2]])
+        focal = np.asarray([p[0], p[1], p[2] - self.focal])
+
+        tl, tr, bl, br, focal = rotate(np.stack([tl, tr, bl, br, focal]), np.expand_dims(r_vec, 0))
+
         points = vtk.vtkPoints()
         points.SetNumberOfPoints(5)
         points.SetPoint(0, tl[0], tl[1], tl[2])
