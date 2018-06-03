@@ -113,10 +113,14 @@ class PixelCloud(PointCloud):
         self.vtkPoints = vtk.vtkPoints()
         self.vtkCells = vtk.vtkCellArray()
         self.vtkDepth = vtk.vtkDoubleArray()
+        #setup colors
+        self.colors = vtk.vtkUnsignedCharArray()
+        self.colors.SetNumberOfComponents(3)
+        self.colors.SetName("Colors")
         self.clear()
         mapper = vtk.vtkPolyDataMapper()
         mapper.SetInputData(self.vtkPolyData)
-        mapper.SetColorModeToDefault()
+        # mapper.SetColorModeToDefault()
         mapper.SetScalarRange(z_min, z_max)
         mapper.SetScalarVisibility(1)
         self.vtkActor = vtk.vtkActor()
@@ -124,24 +128,29 @@ class PixelCloud(PointCloud):
         self.vtkActor.SetMapper(mapper)
 
     def add_object(self, point, color=None):
-        if color is not None:
-            raise NotImplementedError
+        if color is None:
+            color = point / np.lingalg.norm(point) * 255.
+        else:
+            color = color
         if self.vtkPoints.GetNumberOfPoints() < self.max_num:
             pointId = self.vtkPoints.InsertNextPoint(point[:])
             self.vtkDepth.InsertNextValue(point[2])
             self.vtkCells.InsertNextCell(1)
             self.vtkCells.InsertCellPoint(pointId)
+            self.colors.InsertNextTuple3(*color)
         else:
             r = np.random.randint(0, self.max_num)
             self.vtkPoints.SetPoint(r, point[:])
+        self.vtkPolyData.GetPointData().SetScalars(self.colors)
         self.vtkCells.Modified()
         self.vtkPoints.Modified()
-        self.vtkDepth.Modified()
+        # self.vtkDepth.Modified()
 
-    def get_actors():
+    def get_actors(self):
         return self.vtkActors
 
     def clear(self):
+
         self.vtkPoints = vtk.vtkPoints()
         self.vtkCells = vtk.vtkCellArray()
         self.vtkDepth = vtk.vtkDoubleArray()
@@ -156,7 +165,7 @@ class SphereCloud(PointCloud):
     """ Render a point cloud of mini spheres which are easier
     to see, but more expensive to render. """
 
-    def __init__(self, z_min=-1.0, z_max=1.0, max_num=100, radius=.03):
+    def __init__(self, z_min=-1.0, z_max=1.0, max_num=500, radius=.003):
         self.max_num = max_num
         self.radius = radius
         self.vtkActors = []
@@ -196,11 +205,14 @@ class OrientedRectangles(object):
         self.focal = focal
         self.vtkActors = []
 
-    def add_rect(self, position, r_vec):
+    def add_rect(self, position, r_vec, focal_length=None):
 
         if len(self.vtkActors) > self.max_num:
             assert False, 'too many OrientedRectangles to render.'
 
+        if focal_length is not None:
+            self.height = focal_length
+            self.width = focal_length
         p = position
         tl = np.asarray([p[0] - self.width, p[1] - self.height, p[2]])
         tr = np.asarray([p[0] + self.width, p[1] - self.height, p[2]])
@@ -254,22 +266,24 @@ class OrientedRectangles(object):
         self.vtkActors = []
 
 
-def render_pts_and_cams(points, point_colors, camera_positions, camera_rvecs,
+def render_pts_and_cams(points, point_colors, camera_positions, camera_rvecs, focal_length=None,
                         use_spheres=True):
     """ Render a set of points and camera positions and orientations """
-    pc = PointCloud()
+    pc = PixelCloud()
     if use_spheres:
         pc = SphereCloud()
     normalize_factor = max(abs(points).max(), abs(camera_positions).max())
     normed_points = copy.deepcopy(points) / normalize_factor
     normed_camera_positions = copy.deepcopy(camera_positions) / normalize_factor
+    if focal_length is not None:
+        focal_length = focal_length / normalize_factor
 
     for point, color in zip(normed_points, point_colors):
         pc.add_object(point, color=color)
 
     orr = OrientedRectangles()
     for pos, rvec in zip(normed_camera_positions, camera_rvecs):
-        orr.add_rect(pos, rvec)
+        orr.add_rect(pos, rvec, focal_length=focal_length)
 
     renderer = Renderer([pc, orr])
     renderer.run()

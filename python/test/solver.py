@@ -1,4 +1,5 @@
 from scipy.optimize import least_squares
+from scipy import ndimage, misc
 import numpy as np
 import time
 
@@ -17,12 +18,13 @@ def get_solver_params(camera_kps, camera_params_initial_guess=None,
     camera_params = camera_params_initial_guess
     if camera_params is None:
         camera_params = np.zeros((n_cams, 6))
+
     # points_3d with shape (n_points, 3) contains initial estimates
     # of point coordinates in the world frame.
     n_points = camera_kps.shape[1]
     points_3d = points_3d_initial_guess
     if points_3d is None:
-        points_3d = np.ones((n_points, 3))
+        points_3d = np.ones((n_points, 3)) * 1000.
     # camera_ind with shape (n_observations,) contains indices of
     # cameras (from 0 to n_cameras - 1) involved in each observation.
     camera_indices = []
@@ -51,8 +53,21 @@ def get_solver_params(camera_kps, camera_params_initial_guess=None,
     return camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length
 
 
-def run_solver(camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length,
-               verbose=2):
+def remove_outliers(res, point_indices, points_3d, max_zscore=.5):
+    points_3d[point_indices]
+    points_to_take = []
+    residuals = np.abs(res.fun)
+    mean_res = np.mean(residuals)
+    std_res = np.std(residuals)
+    residuals = ndimage.maximum_filter(residuals, size=2)
+    residuals = residuals[::2]
+    removed_obs_inds = np.where(residuals > mean_res + std_res * max_zscore)
+    points_to_remove = np.unique(point_indices[removed_obs_inds])
+    return points_to_remove
+
+
+def run_solver(camera_params, points_3d, camera_indices, point_indices, points_2d,
+               focal_length=None, verbose=2, toss_outliers=True):
     """ Run the optimization """
 
     n_cams = camera_params.shape[0]
@@ -67,7 +82,7 @@ def run_solver(camera_params, points_3d, camera_indices, point_indices, points_2
     x0 = np.hstack((camera_params.ravel(), points_3d.ravel(), focal_length))
     f0 = fun(x0, n_cams, n_pts, camera_indices, point_indices, points_2d)
     t0 = time.time()
-    res = least_squares(fun, x0, jac_sparsity=A, verbose=verbose, x_scale='jac', ftol=1e-4,
+    res = least_squares(fun, x0, jac_sparsity=A, verbose=verbose, x_scale='jac', ftol=1e-5,
                         method='trf', args=(n_cams, n_pts, camera_indices, point_indices,
                                             points_2d))
     t1 = time.time()
@@ -77,6 +92,12 @@ def run_solver(camera_params, points_3d, camera_indices, point_indices, points_2
     num_cam_params = camera_params.size
     recon_camera_params = np.reshape(res.x[:num_cam_params], camera_params.shape)
     recon_3d_points = np.reshape(res.x[num_cam_params:-1], points_3d.shape)
-    recon_focal_length = res.x[-1]
 
-    return recon_camera_params, recon_3d_points, recon_focal_length
+    removed_obs_indices = []
+    points_to_remove = None
+    if toss_outliers:
+        points_to_remove = remove_outliers(res, point_indices, recon_3d_points)
+
+    recon_focal_length = res.x[-1]
+    print(recon_focal_length)
+    return recon_camera_params, recon_3d_points, recon_focal_length, points_to_remove

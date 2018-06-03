@@ -21,28 +21,28 @@ def find_matching_points(img1, img2, max_pix_movement=50, normalize=True, show=F
     matches = sorted(matches, key = lambda x:x.distance)
     # Draw first 10 matches.
     if show:
-        img3 = cv2.drawMatches(img1,kp1,img2,kp2,matches[:10], None,flags=2)
+        img3 = cv2.drawMatches(img1,kp1,img2,kp2,matches[:500], None,flags=2)
         plt.imshow(img3),plt.show()
     # Get the matching keypoints for each of the images
 
     list_kp1 = []
     list_kp2 = []
     for mat in matches:
-        img1_idx = matches.queryIdx
-        img2_idx = matches.trainIdx
+        img1_idx = mat.queryIdx
+        img2_idx = mat.trainIdx
 
         # x - columns
         # y - rows
         list_kp1.append(kp1[img1_idx].pt)
         list_kp2.append(kp2[img2_idx].pt)
 
-        fundamental_matrix, mask = cv2.findFundamentalMat(
-            previous_pts,
-            current_pts,
-            cv2.FM_RANSAC
-        )
+    n_kp1, n_kp2 = np.float32(list_kp1), np.float32(list_kp2)
+    n_kp1 /= np.asarray([img1.shape[1], img1.shape[0]], np.float32)
+    n_kp2 /= np.asarray([img2.shape[1], img2.shape[0]], np.float32)
+    n_kp1 = n_kp1 * 2. - 1.
+    n_kp2 = n_kp2 * 2. - 1.
 
-    return np.int32(list_kp1), np.int32(list_kp2)
+    return np.int32(list_kp1), np.int32(list_kp2), n_kp1, n_kp2
 
 
 def find_matching_points_mock(img1, img2, max_pix_movement=50, show=False):

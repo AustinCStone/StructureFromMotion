@@ -110,19 +110,22 @@ def test_ten_point(render_ground_truth=False, render_reconstruction=False):
     kp_to_color = {i: cam_1_img[kp[1], kp[0]] for i, kp in enumerate(kp1)}
 
     if render_ground_truth: # show the ground truth geometry
-        render_pts_and_cams(points, colors, camera_params[:, 3:], camera_params[:, :3])
+        render_pts_and_cams(points, colors, camera_params[:, 3:], camera_params[:, :3],
+                            focal_x)
 
     # run the solver with the correspondences to generate a reconstruction
     camera_kps = np.stack([n_kp1, n_kp2], axis=0)
     camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length = \
         solver.get_solver_params(camera_kps)
-    recon_camera_params, recon_3d_points, recon_focal_length = solver.run_solver(
-        camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length)
+    recon_camera_params, recon_3d_points, recon_focal_length, _ = solver.run_solver(
+        camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length,
+        toss_outliers=False)
 
     recon_colors = [kp_to_color[i] for i in range(len(points_3d))]
     if render_reconstruction:
         render_pts_and_cams(recon_3d_points, recon_colors, recon_camera_params[:, 3:], 
-                            recon_camera_params[:, :3])
+                            recon_camera_params[:, :3],
+                            recon_focal_length)
 
     check_image_match(recon_3d_points, recon_camera_params, recon_focal_length, recon_colors,
                       points, camera_params, focal_x, colors, rows, cols)
