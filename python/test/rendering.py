@@ -173,7 +173,7 @@ class SphereCloud(PointCloud):
             if color is None:
                 actor.GetProperty().SetColor(point[:] * .7 + .3)
             else:
-                actor.GetProperty().SetColor(color)
+                actor.GetProperty().SetColor(color / 255.)
             self.vtkActors.append(actor)
         else:
             assert False, 'Too many spheres to render.'
