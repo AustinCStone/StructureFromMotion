@@ -1,9 +1,9 @@
 """ Some rendering utilities for debugging purposes.
 TODO: type annotations """
 
-import vtk
-import numpy as np
 import copy
+import numpy as np
+import vtk
 
 from bundle_adjustment import rotate
 

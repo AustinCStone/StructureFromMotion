@@ -1,5 +1,35 @@
+from PIL import Image
 import cv2
 import numpy as np
+import time
+
+
+def draw_points2d(points_2d, colors, rows, cols, show=False):
+    """ Draw 2d uv camera coords in an image
+
+    Params:
+        points_2d: np.float32 array of shape (n, 2)
+            the uv coordinates for points in the world
+        colors: np.uint8 array of shape (n, 3)
+            the RGB color for each point in points_2d
+        rows: int
+            the number of rows in the image
+        cols: int
+            the number of cols in the image
+        show: bool
+            whether to display the image
+    """
+
+    img = np.zeros((rows, cols, 3))
+    img_space_points_2d = (points_2d + 1.) / 2. * np.asarray((cols, rows))
+    img_space_points_2d = np.round(img_space_points_2d, decimals=0).astype(np.int32)
+    for (point_2d, color) in zip(img_space_points_2d, colors):
+        if (0 <= point_2d[1] < rows) and (0 <= point_2d[0] < cols):
+            img[point_2d[1], point_2d[0]] = color
+    if show:
+        Image.fromarray(img.astype('uint8'), 'RGB').show()
+        time.sleep(.25)
+    return img
 
 
 def rgb2gray(rgb):

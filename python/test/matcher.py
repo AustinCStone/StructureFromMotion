@@ -1,5 +1,7 @@
-import numpy as np
+from matplotlib import pyplot as plt
 import cv2
+import numpy as np
+
 
 def find_matching_points(img1, img2, max_pix_movement=50, normalize=True, show=False):
     """ Find corresponding points between two images using openCV ORB detector """
