@@ -3,6 +3,7 @@ TODO: type annotations """
 
 import vtk
 import numpy as np
+import copy
 
 from bundle_adjustment import rotate
 
@@ -251,6 +252,27 @@ class OrientedRectangles(object):
 
     def clear(self):
         self.vtkActors = []
+
+
+def render_pts_and_cams(points, point_colors, camera_positions, camera_rvecs,
+                        use_spheres=True):
+    """ Render a set of points and camera positions and orientations """
+    pc = PointCloud()
+    if use_spheres:
+        pc = SphereCloud()
+    normalize_factor = max(abs(points).max(), abs(camera_positions).max())
+    normed_points = copy.deepcopy(points) / normalize_factor
+    normed_camera_positions = copy.deepcopy(camera_positions) / normalize_factor
+
+    for point, color in zip(normed_points, point_colors):
+        pc.add_object(point, color=color)
+
+    orr = OrientedRectangles()
+    for pos, rvec in zip(normed_camera_positions, camera_rvecs):
+        orr.add_rect(pos, rvec)
+
+    renderer = Renderer([pc, orr])
+    renderer.run()
 
 
 if __name__ == '__main__':

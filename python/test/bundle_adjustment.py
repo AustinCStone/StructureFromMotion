@@ -33,8 +33,8 @@ def fun(params, n_cameras, n_points, camera_indices, point_indices, points_2d):
     `params` contains camera parameters and 3-D coordinates.
     """
     camera_params = params[:n_cameras * 6].reshape((n_cameras, 6))
-    points_3d = params[n_cameras * 6:-2].reshape((n_points, 3))
-    focal_x = params[-2]
+    points_3d = params[n_cameras * 6:-1].reshape((n_points, 3))
+    focal_x = params[-1]
     focal_y = params[-1]
     points_proj = project(points_3d[point_indices], camera_params[camera_indices],
                           focal_x, focal_y)
@@ -44,7 +44,7 @@ def fun(params, n_cameras, n_points, camera_indices, point_indices, points_2d):
 def bundle_adjustment_sparsity(n_cameras, n_points, camera_indices, point_indices):
 
     m = camera_indices.size * 2
-    n = n_cameras * 6 + n_points * 3 + 2
+    n = n_cameras * 6 + n_points * 3 + 1
     A = lil_matrix((m, n), dtype=int)
 
     i = np.arange(camera_indices.size)
@@ -58,6 +58,5 @@ def bundle_adjustment_sparsity(n_cameras, n_points, camera_indices, point_indice
         A[2 * i + 1, n_cameras * 6 + point_indices * 3 + s] = 1
     # all residuals are impacted by (shared) focal length
     A[:, -1] = 1
-    A[:, -2] = 1
 
     return A
