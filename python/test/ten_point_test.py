@@ -15,8 +15,7 @@ import utils
 import matcher
 
 
-def get_solver_params(camera_kps, rows, cols, colors,
-                      camera_params_initial_guess=None,
+def get_solver_params(camera_kps, camera_params_initial_guess=None,
                       points_3d_initial_guess=None,
                       focal_length_initial_guess=None):
     """ Set up the initial solver params """
@@ -56,7 +55,7 @@ def get_solver_params(camera_kps, rows, cols, colors,
             if keyp is None:
                 continue
             points_2d.append(keyp)
-    points_2d = np.asarray(points2d, np.float32)
+    points_2d = np.asarray(points_2d, np.float32)
 
     focal_length = focal_length_initial_guess
     if focal_length is None:
@@ -65,32 +64,32 @@ def get_solver_params(camera_kps, rows, cols, colors,
     return camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length
 
 
-def _run_solver(camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length):
+def run_solver(camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length):
     """ Run the optimization """
 
     n_cams = camera_params.shape[0]
     n_pts = points_3d.shape[0]
 
-    print("n_cameras: {}".format(n_cameras))
-    print("n_points: {}".format(n_points))
-    print("Total number of parameters: {}".format(6 * n_cams + 3 * n_points + 1))
+    print("n_cameras: {}".format(n_cams))
+    print("n_points: {}".format(n_pts))
+    print("Total number of parameters: {}".format(6 * n_cams + 3 * n_pts + 1))
     print("Total number of residuals: {}".format(2 * n_pts))
 
     A = bundle_adjustment_sparsity(n_cams, n_pts, camera_indices, point_indices)
     x0 = np.hstack((camera_params.ravel(), points_3d.ravel(), focal_length))
-    f0 = fun(x0, n_cameras, n_points, camera_indices, point_indices, points_2d)
+    f0 = fun(x0, n_cams, n_pts, camera_indices, point_indices, points_2d)
     t0 = time.time()
     res = least_squares(fun, x0, jac_sparsity=A, verbose=2, x_scale='jac', ftol=1e-4, method='trf',
-                        args=(n_cameras, n_points, camera_indices, point_indices, points_2d))
+                        args=(n_cams, n_pts, camera_indices, point_indices, points_2d))
     t1 = time.time()
-    print("Optimization took {0:.0f} seconds".format(t1 - t0))
+    print("Optimization took {} seconds".format(t1 - t0))
 
     num_cam_params = camera_params.size
-    found_camera_params = np.reshape(res.x[:num_cam_params], camera_params.shape)
-    found_3d_points = np.reshape(res.x[num_cam_params:-1], points_3d.shape)
-    found_focal_length = res.x[-1]
+    recon_camera_params = np.reshape(res.x[:num_cam_params], camera_params.shape)
+    recon_3d_points = np.reshape(res.x[num_cam_params:-1], points_3d.shape)
+    recon_focal_length = res.x[-1]
 
-    return found_camera_params, found_3d_points, found_focal_length
+    return recon_camera_params, recon_3d_points, recon_focal_length
 
 
 def check_reconstruction(gt_camera_params, rec_camera_params, gt_3d_points,
@@ -180,35 +179,53 @@ def get_cameras():
 
     return camera_params, focal_x, focal_y, rows, cols
 
+def check_image_match():
+    pass
 
 def test_ten_point(render_ground_truth=False, render_reconstruction=False):
     """ A simple test to check if we can recover the 3D positions of 10 known 3D points
     and camera parameters given two images of the points where the correspondences
     are known to be correct. """
 
-    points, colors = get_points()
+    points, colors = get_points() # get some known 3D points, each with a color
+    camera_params, focal_x, focal_y, rows, cols = get_cameras() # get some known cameras
 
-    camera_params, focal_x, focal_y, rows, cols = get_cameras()
-
+    # project the 3d points into each camera
     cam_1_points2d = project(points, camera_params[np.asarray([0 for _ in points])],
                              focal_x, focal_y)
-
     cam_2_points2d = project(points, camera_params[np.asarray([1 for _ in points])],
                              focal_x, focal_y)
-
+    # draw the projected points in the camera images
     cam_1_img = draw_points2d(cam_1_points2d, colors, rows, cols, show=True)
     cam_2_img = draw_points2d(cam_2_points2d, colors, rows, cols, show=True)
 
-    locs1, locs2 = matcher.find_matching_points_mock(utils.preprocess_img(cam_1_img),
-                                                     utils.preprocess_img(cam_2_img))
+    # find correspondences between the two images
+    kp1, kp2, n_kp1, n_kp2 = matcher.find_matching_points_mock(utils.preprocess_img(cam_1_img),
+                                                               utils.preprocess_img(cam_2_img))
 
-    assert len(locs1) == len(locs2) == len(points)
+    assert len(kp1) == len(n_kp1) == len(kp2) == len(n_kp2) == len(points)
 
-    if render_ground_truth:
+    # keep track of which correspondence maps to which color
+    kp_to_color = {i: cam_1_img[kp[1], kp[0]] for i, kp in enumerate(kp1)}
+
+    if render_ground_truth: # show the ground truth geometry
         render_pts_and_cams(points, colors, camera_params[:, 3:], camera_params[:, :3])
 
-    solve(locs1, locs2, rows, cols, colors)
+    # run the solver with the correspondences to generate a reconstruction
+    camera_kps = np.stack([n_kp1, n_kp2], axis=0)
+    camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length = \
+        get_solver_params(camera_kps)
+    recon_camera_params, recon_3d_points, _ = run_solver(
+        camera_params, points_3d, camera_indices, point_indices, points_2d, focal_length)
+
+    recon_colors = [kp_to_color[i] / 255. for i in range(len(points_3d))]
+    if render_reconstruction:
+        render_pts_and_cams(recon_3d_points, recon_colors, recon_camera_params[:, 3:], 
+                            recon_camera_params[:, :3])
+
+def main():
+    test_ten_point(render_ground_truth=False,
+                   render_reconstruction=True)
 
 if __name__ == '__main__':
-    test_ten_point(render_ground_truth=False,
-                   render_reconstruction=False)
+    main()

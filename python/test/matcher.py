@@ -43,7 +43,7 @@ def find_matching_points(img1, img2, max_pix_movement=50, normalize=True, show=F
     return np.int32(list_kp1), np.int32(list_kp2)
 
 
-def find_matching_points_mock(img1, img2, max_pix_movement=50, normalize=True, show=False):
+def find_matching_points_mock(img1, img2, max_pix_movement=50, show=False):
 
     if show:
         raise NotImplementedError
@@ -62,12 +62,11 @@ def find_matching_points_mock(img1, img2, max_pix_movement=50, normalize=True, s
                 matched = True
                 list_kp1.append((locs1[1][i], locs1[0][i]))
                 list_kp2.append((locs2[1][j], locs2[0][j]))
-    if normalize:
-        kp1, kp2 = np.float32(list_kp1), np.float32(list_kp2)
-        kp1 /= np.asarray([img1.shape[1], img1.shape[0]], np.float32)
-        kp2 /= np.asarray([img2.shape[1], img2.shape[0]], np.float32)
-        kp1 = kp1 * 2. - 1.
-        kp2 = kp2 * 2. - 1.
-        return kp1, kp2
+    
+    n_kp1, n_kp2 = np.float32(list_kp1), np.float32(list_kp2)
+    n_kp1 /= np.asarray([img1.shape[1], img1.shape[0]], np.float32)
+    n_kp2 /= np.asarray([img2.shape[1], img2.shape[0]], np.float32)
+    n_kp1 = n_kp1 * 2. - 1.
+    n_kp2 = n_kp2 * 2. - 1.
 
-    return np.int32(list_kp1), np.int32(list_kp2)
+    return np.int32(list_kp1), np.int32(list_kp2), n_kp1, n_kp2
