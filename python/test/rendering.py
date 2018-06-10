@@ -129,7 +129,7 @@ class PixelCloud(PointCloud):
 
     def add_object(self, point, color=None):
         if color is None:
-            color = point / np.lingalg.norm(point) * 255.
+            color = point / np.linalg.norm(point) * 255.
         else:
             color = color
         if self.vtkPoints.GetNumberOfPoints() < self.max_num:
@@ -267,14 +267,20 @@ class OrientedRectangles(object):
 
 
 def render_pts_and_cams(points, point_colors, camera_positions, camera_rvecs, focal_length=None,
-                        use_spheres=True):
+                        use_spheres=False):
     """ Render a set of points and camera positions and orientations """
     pc = PixelCloud()
     if use_spheres:
         pc = SphereCloud()
-    normalize_factor = max(abs(points).max(), abs(camera_positions).max())
+
+    normalize_factor = max(np.max(abs(points)), np.max(abs(camera_positions)))
+
     normed_points = copy.deepcopy(points) / normalize_factor
     normed_camera_positions = copy.deepcopy(camera_positions) / normalize_factor
+
+    # normed_points = copy.deepcopy(points)
+    # normed_camera_positions = copy.deepcopy(camera_positions)
+
     if focal_length is not None:
         focal_length = focal_length / normalize_factor
 

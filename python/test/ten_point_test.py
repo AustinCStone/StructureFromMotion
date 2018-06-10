@@ -111,7 +111,7 @@ def test_ten_point(render_ground_truth=False, render_reconstruction=False):
 
     if render_ground_truth: # show the ground truth geometry
         render_pts_and_cams(points, colors, camera_params[:, 3:], camera_params[:, :3],
-                            focal_x)
+                            focal_x, use_spheres=True)
 
     # run the solver with the correspondences to generate a reconstruction
     camera_kps = np.stack([n_kp1, n_kp2], axis=0)
@@ -125,13 +125,13 @@ def test_ten_point(render_ground_truth=False, render_reconstruction=False):
     if render_reconstruction:
         render_pts_and_cams(recon_3d_points, recon_colors, recon_camera_params[:, 3:], 
                             recon_camera_params[:, :3],
-                            recon_focal_length)
+                            recon_focal_length, use_spheres=True)
 
     check_image_match(recon_3d_points, recon_camera_params, recon_focal_length, recon_colors,
                       points, camera_params, focal_x, colors, rows, cols)
 
 def main():
-    test_ten_point(render_ground_truth=False,
+    test_ten_point(render_ground_truth=True,
                    render_reconstruction=False)
 
 if __name__ == '__main__':

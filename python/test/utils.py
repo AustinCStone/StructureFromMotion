@@ -73,12 +73,12 @@ def mat2euler(matrix):
     
     cy = np.sqrt(M[0, 0]*M[0, 0] + M[1, 0]*M[1, 0])
     if cy > 1e-9:
-        ax = np.atan2( M[2, 1],  M[2, 2])
-        ay = np.atan2(-M[2, 0],  cy)
-        az = np.atan2( M[1, 0],  M[0, 0])
+        ax = np.arctan2( M[2, 1],  M[2, 2])
+        ay = np.arctan2(-M[2, 0],  cy)
+        az = np.arctan2( M[1, 0],  M[0, 0])
     else:
-        ax = np.atan2(-M[1, 2],  M[1, 1])
-        ay = np.atan2(-M[2, 0],  cy)
+        ax = np.arctan2(-M[1, 2],  M[1, 1])
+        ay = np.arctan2(-M[2, 0],  cy)
         az = 0.0
 
     return ax, ay, az
@@ -93,6 +93,10 @@ def rvec2euler(rvec):
     """ convert rodrigues vector into euler angles """
     return mat2euler(cv2.Rodrigues(rvec)[0])
 
+def mat2rvec(mat):
+    euler = mat2euler(mat)
+    rvec = euler2rvec(*euler)
+    return rvec
 
 def euler2mat(ai, aj, ak):
     """ convert euler angles to a rotation matrix """
